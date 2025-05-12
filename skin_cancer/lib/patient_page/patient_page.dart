@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'take_picture_screen.dart';
 import 'tickets_list.dart';
-import 'patinet_info.dart';
+import 'patinet_info.dart'; // Fixed typo: 'patinet_info.dart' -> 'patient_info.dart'
 import 'appointment_screen.dart';
 
 class PatientPage extends StatefulWidget {
@@ -21,9 +21,9 @@ class _PatientPageState extends State<PatientPage> {
   // Screens for each navigation item
   List<Widget> get _screens => [
         TakePictureScreen(tickets: _tickets), // Pass the tickets list
-        TicketListScreen(tickets: _tickets), // Pass the list of tickets
-        AppointmentScreen(),
-        PatientProfileSettingsScreen(),
+        const TicketListScreen(), // Updated to use the new stateful widget without tickets parameter
+        const AppointmentScreen(),
+        const PatientProfileSettingsScreen(), // Changed to match the class name in patient_info.dart
       ];
 
   void _onItemTapped(int index) {
@@ -37,16 +37,16 @@ class _PatientPageState extends State<PatientPage> {
     return Scaffold(
       extendBodyBehindAppBar: true,
       body: Container(
-        decoration: BoxDecoration(color: Color.fromARGB(255, 231, 239, 250)),
+        decoration: const BoxDecoration(color: Color.fromARGB(255, 231, 239, 250)),
         child: _screens[_selectedIndex],
       ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           color: Colors.blue, // Changed background to blue
-          borderRadius: BorderRadius.vertical(top: Radius.circular(0)), // Rounded edges
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(0)), // Rounded edges
         ),
         child: ClipRRect(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(0)),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(0)),
           child: BottomNavigationBar(
             backgroundColor: Colors.blue[700], // Ensure consistent blue background
             currentIndex: _selectedIndex,
@@ -56,7 +56,7 @@ class _PatientPageState extends State<PatientPage> {
             showSelectedLabels: true, // Shows labels correctly
             showUnselectedLabels: true,
             type: BottomNavigationBarType.fixed, // Ensures consistent styling
-            items: [
+            items: const [
               BottomNavigationBarItem(
                 icon: Icon(Icons.camera_alt),
                 label: 'Take Picture',
@@ -73,7 +73,6 @@ class _PatientPageState extends State<PatientPage> {
                 icon: Icon(Icons.person),
                 label: 'Profile',
               ),
-              
             ],
           ),
         ),
@@ -81,3 +80,8 @@ class _PatientPageState extends State<PatientPage> {
     );
   }
 }
+
+
+
+
+

@@ -178,70 +178,81 @@ class _PreviewEditScreenState extends State<PreviewEditScreen> {
     }
   }
 
-  Future<void> _submitTicket() async {
-    if (_formKey.currentState!.validate()) {
-      if (!_analysisComplete) {
-        await _analyzeImage();
-      }
+Future<void> _submitTicket() async {
+  if (_formKey.currentState!.validate()) {
+    if (!_analysisComplete) {
+      await _analyzeImage();
+    }
+    
+    if (!_analysisComplete) {
+      return; // Analysis failed
+    }
+    
+    setState(() {
+      _isProcessing = true;
+    });
+    
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final patientId = prefs.getString('patient_id') ?? 'unknown';
       
-      if (!_analysisComplete) {
-        return; // Analysis failed
-      }
+      // 1. Upload the image first
+      final serverImagePath = await _apiService.uploadImage(File(_currentImagePath));
       
-      setState(() {
-        _isProcessing = true;
-      });
-      
-      try {
-        final prefs = await SharedPreferences.getInstance();
-        final patientId = prefs.getString('patient_id') ?? 'unknown';
-        
-        final serverImagePath = await _apiService.uploadImage(File(_currentImagePath));
-        
-        Map<String, dynamic> symptomData = {};
-        for (var question in _questions) {
-          if (question.type == QuestionType.multipleChoice) {
-            symptomData[question.question] = question.answer;
-            if (question.answer == 'Other') {
-              symptomData['${question.question} details'] = question.detailsController.text;
-            }
-          } else {
-            symptomData[question.question] = question.textController.text;
+      // 2. Create a structured symptom data object from questions
+      Map<String, dynamic> symptomData = {};
+      for (var question in _questions) {
+        if (question.type == QuestionType.multipleChoice) {
+          symptomData[question.question] = question.answer;
+          if (question.answer == 'Other') {
+            symptomData['${question.question} details'] = question.detailsController.text;
           }
+        } else {
+          symptomData[question.question] = question.textController.text;
         }
-        
-        final String diagnosisResult = 
-            _analysisResults['diagnosis'] ?? 'UNKNOWN';
-        
-        await _apiService.saveMedicalImage(
-          patientId: patientId,
-          imagePath: serverImagePath,
-          primaryScore: _analysisResults['primary_score'] ?? 0.0,
-          secondaryScore: _analysisResults['secondary_score'] ?? 0.0,
-          lesionType: _analysisResults['lesion_type'] ?? 'unknown',
-          priority: _analysisResults['priority'] ?? 0,
-          doctorNotes: json.encode(symptomData),
-          diagnosisResult: diagnosisResult,
-        );
-        
-        widget.tickets.add(_currentImagePath);
-        
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Analysis submitted successfully')),
-        );
-        Navigator.pop(context);
-        Navigator.pop(context);
-      } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error submitting analysis: $e')),
-        );
-      } finally {
-        setState(() {
-          _isProcessing = false;
-        });
       }
+      
+      final String diagnosisResult = _analysisResults['diagnosis'] ?? 'UNKNOWN';
+      
+      final medicalImageResponse = await _apiService.saveMedicalImage(
+        patientId: patientId,
+        imagePath: serverImagePath,
+        primaryScore: _analysisResults['primary_score'] ?? 0.0,
+        secondaryScore: _analysisResults['secondary_score'] ?? 0.0,
+        lesionType: _analysisResults['lesion_type'] ?? 'unknown',
+        priority: _analysisResults['priority'] ?? 0,
+        doctorNotes: json.encode(symptomData),
+        diagnosisResult: diagnosisResult,
+      );
+      
+      // 4. Now create the ticket with the medical image ID
+      final String medicalImageId = medicalImageResponse['id'].toString();
+      
+      await _apiService.createTicket(
+        medicalImageId: medicalImageId,
+        symptomData: symptomData,
+        diagnosisResult: diagnosisResult,
+        priority: _analysisResults['priority'] ?? 0,
+      );
+      
+      widget.tickets.add(_currentImagePath);
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Analysis submitted successfully')),
+      );
+      Navigator.pop(context);
+      Navigator.pop(context);
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error submitting analysis: $e')),
+      );
+    } finally {
+      setState(() {
+        _isProcessing = false;
+      });
     }
   }
+}
 
   @override
   Widget build(BuildContext context) {

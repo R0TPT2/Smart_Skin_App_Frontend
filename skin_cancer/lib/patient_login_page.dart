@@ -7,6 +7,7 @@ import 'reset_password.dart';
 import 'patient_page/patient_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:flutter/foundation.dart';  // For debugPrint
 
 class PatientLoginPage extends StatefulWidget {
   const PatientLoginPage({super.key});
@@ -27,6 +28,11 @@ class _PatientLoginPageState extends State<PatientLoginPage> {
     try {
       final baseUrl = dotenv.env['API_URL'] ?? '';
       final url = Uri.parse('$baseUrl/authentication/patient/login/');
+      
+      debugPrint('Attempting login to: $url');
+      debugPrint('National ID: ${nationalIdController.text}');
+      // DO NOT log password in production
+      
       final response = await http.post(
         url,
         headers: {'Content-Type': 'application/json'},
@@ -36,16 +42,26 @@ class _PatientLoginPageState extends State<PatientLoginPage> {
         }),
       );
 
+      debugPrint('Login response status: ${response.statusCode}');
+      
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = jsonDecode(response.body);
+        debugPrint('Login successful! Response data received');
+        
         final String accessToken = data['access'];
         final String refreshToken = data['refresh'];
+        final String patientId = nationalIdController.text; // Store the patient ID
 
+        // Store all needed authentication info
         SharedPreferences prefs = await SharedPreferences.getInstance();
         await prefs.setString('access_token', accessToken);
         await prefs.setString('refresh_token', refreshToken);
+        await prefs.setString('patient_id', patientId);
+        
+        debugPrint('Saved auth tokens and patient ID to SharedPreferences');
 
-        String patientName = data['name'] ?? 'DEFAULT_NAME';
+        // Try to get patient name or default to ID if not available
+        String patientName = data['name'] ?? nationalIdController.text;
 
         Navigator.push(
           context,
@@ -57,11 +73,13 @@ class _PatientLoginPageState extends State<PatientLoginPage> {
           ),
         );
       } else {
+        debugPrint('Login failed: ${response.body}');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Invalid credentials')),
         );
       }
     } catch (e) {
+      debugPrint('Login error: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error connecting to server: $e')),
       );
@@ -72,6 +90,7 @@ class _PatientLoginPageState extends State<PatientLoginPage> {
 
   @override
   Widget build(BuildContext context) {
+    // Rest of your build method stays the same...
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: AppBar(
