@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+import '../appointment_service.dart';
 
 class AppointmentScreen extends StatefulWidget {
   const AppointmentScreen({super.key});
@@ -9,37 +11,64 @@ class AppointmentScreen extends StatefulWidget {
 
 class _AppointmentScreenState extends State<AppointmentScreen> {
   int _selectedTabIndex = 0;
-
-  final List<Map<String, dynamic>> allAppointments = [
-    {
-      'name': 'William Andrew',
-      'date': '22 Feb 2024',
-      'time': '09:45 PM',
-      'status': 'At Clinic',
-      'ticketId': '145875AB',
-      'doctorImage': 'assests/black_doctor.jpg',
-      'completed': false, 
-      'confirmed': false, 
-    },
-    {
-      'name': 'Saniya Lieders',
-      'date': '20 Feb 2024',
-      'time': '05:30 PM',
-      'status': 'Completed',
-      'ticketId': '145876AB',
-      'doctorImage': 'assests/black_doctor.jpg',
-      'completed': true, 
-      'confirmed': true, 
-    },
-  ];
-
-  void _confirmAppointment(int index) {
+  bool _isLoading = true;
+  List<Appointment> _appointments = [];
+  final AppointmentService _appointmentService = AppointmentService();
+  
+  @override
+  void initState() {
+    super.initState();
+    _loadAppointments();
+  }
+  
+  Future<void> _loadAppointments() async {
     setState(() {
-      allAppointments[index]['confirmed'] = true; 
+      _isLoading = true;
     });
+    
+    try {
+      final appointments = await _appointmentService.getAppointments();
+      setState(() {
+        _appointments = appointments;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+      _showErrorSnackBar('Failed to load appointments: $e');
+    }
   }
 
-  void _cancelAppointment(int index) {
+  void _showErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red,
+      ),
+    );
+  }
+
+  void _confirmAppointment(String appointmentId) async {
+    try {
+      await _appointmentService.confirmAppointment(appointmentId);
+      _showSuccessSnackBar('Appointment confirmed successfully');
+      _loadAppointments(); // Refresh the list after confirmation
+    } catch (e) {
+      _showErrorSnackBar('Failed to confirm appointment: $e');
+    }
+  }
+
+  void _showSuccessSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.green,
+      ),
+    );
+  }
+
+  void _cancelAppointment(String appointmentId) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -52,11 +81,15 @@ class _AppointmentScreenState extends State<AppointmentScreen> {
             child: Text("Return Back", style: TextStyle(color: Colors.black)),
           ),
           ElevatedButton(
-            onPressed: () {
-              setState(() {
-                allAppointments.removeAt(index); 
-              });
-              Navigator.pop(context); 
+            onPressed: () async {
+              Navigator.pop(context);
+              try {
+                await _appointmentService.cancelAppointment(appointmentId);
+                _showSuccessSnackBar('Appointment cancelled successfully');
+                _loadAppointments(); // Refresh the list after cancellation
+              } catch (e) {
+                _showErrorSnackBar('Failed to cancel appointment: $e');
+              }
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             child: Text("Cancel", style: TextStyle(color: Colors.white)),
@@ -68,6 +101,17 @@ class _AppointmentScreenState extends State<AppointmentScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Filter appointments based on selected tab
+    List<Appointment> filteredAppointments = _appointments.where((apt) {
+      if (_selectedTabIndex == 0) {
+        // Pending tab: show appointments with status PENDING or CONFIRMED but not CANCELLED
+        return apt.status != 'CANCELLED';
+      } else {
+        // Completed tab: show CANCELLED appointments
+        return apt.status == 'CANCELLED';
+      }
+    }).toList();
+
     return Scaffold(
       appBar: PreferredSize(
         preferredSize: Size.fromHeight(60),
@@ -108,134 +152,176 @@ class _AppointmentScreenState extends State<AppointmentScreen> {
                 children: [
                   _buildTabButton(0, 'Pending Appointment'),
                   SizedBox(width: 10),
-                  _buildTabButton(1, 'Complete Appointment'),
+                  _buildTabButton(1, 'Cancelled Appointment'),
                 ],
               ),
             ),
 
-            
+            // Pull-to-refresh
             Expanded(
-              child: ListView.builder(
-                itemCount: allAppointments.where((apt) => apt['completed'] == (_selectedTabIndex == 1)).length,
-                itemBuilder: (context, index) {
-                  final appointmentIndex = allAppointments.indexWhere((apt) => 
-                      apt['completed'] == (_selectedTabIndex == 1));
-                  final appointment = allAppointments[appointmentIndex];
-
-                  return Card(
-                    margin: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    elevation: 5,
-                    color: Colors.white,
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // Doctor Name & Appointment ID in the same row
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(appointment['name'],
-                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-                              Row(
-                                children: [
-                                  Icon(Icons.confirmation_number,
-                                      color: Colors.blue[700], size: 20),
-                                  SizedBox(width: 8),
-                                  Text(appointment['ticketId'],
-                                      style: TextStyle(fontSize: 16)),
-                                ],
-                              ),
-                            ],
-                          ),
-                          SizedBox(height: 10),
-
-                          Row(
-                            children: [
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(8),
-                                child: Image.asset(
-                                  appointment['doctorImage'],
-                                  width: 80,
-                                  height: 80,
-                                  fit: BoxFit.cover,
-                                ),
-                              ),
-                              SizedBox(width: 15),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    _buildInfoRow(Icons.calendar_today,
-                                        'Date: ${appointment['date']}'),
-                                    SizedBox(height: 5),
-                                    _buildInfoRow(Icons.access_time,
-                                        'Time: ${appointment['time']}'),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                          SizedBox(height: 10),
-
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: Container(
-                              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-                              decoration: BoxDecoration(
-                                color: Colors.grey[300],
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Text(
-                                appointment['status'],
-                                style: TextStyle(
-                                    color: Colors.black, fontWeight: FontWeight.bold),
-                              ),
+              child: RefreshIndicator(
+                onRefresh: _loadAppointments,
+                child: _isLoading
+                    ? Center(child: CircularProgressIndicator())
+                    : filteredAppointments.isEmpty
+                        ? Center(
+                            child: Text(
+                              _selectedTabIndex == 0
+                                  ? 'No pending appointments'
+                                  : 'No cancelled appointments',
+                              style: TextStyle(fontSize: 16, color: Colors.grey[600]),
                             ),
+                          )
+                        : ListView.builder(
+                            itemCount: filteredAppointments.length,
+                            itemBuilder: (context, index) {
+                              final appointment = filteredAppointments[index];
+                              return _buildAppointmentCard(appointment);
+                            },
                           ),
-
-                          SizedBox(height: 10),
-
-                          if (!appointment['completed']) ...[
-                            Divider(thickness: 1.5, color: Colors.grey[400]),
-
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                if (!appointment['confirmed'])
-                                  ElevatedButton(
-                                    onPressed: () => _confirmAppointment(appointmentIndex),
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.blue,
-                                      padding: EdgeInsets.symmetric(vertical: 10, horizontal: 18),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(20),
-                                      ),
-                                    ),
-                                    child: Text('Confirm', style: TextStyle(color: Colors.white)),
-                                  ),
-                                ElevatedButton(
-                                  onPressed: () => _cancelAppointment(appointmentIndex),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.red,
-                                    padding: EdgeInsets.symmetric(vertical: 10, horizontal: 18),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(20),
-                                    ),
-                                  ),
-                                  child: Text('Cancel', style: TextStyle(color: Colors.white)),
-                                ),
-                              ],
-                            ),
-                          ]
-                        ],
-                      ),
-                    ),
-                  );
-                },
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAppointmentCard(Appointment appointment) {
+    // Format date and time
+    final dateFormatter = DateFormat('dd MMM yyyy');
+    final timeFormatter = DateFormat('hh:mm a');
+    
+    final formattedDate = dateFormatter.format(appointment.scheduledTime);
+    final formattedTime = timeFormatter.format(appointment.scheduledTime);
+    
+    // Determine appointment status
+    String statusText;
+    Color statusColor;
+    
+    switch (appointment.status) {
+      case 'CONFIRMED':
+        statusText = 'Confirmed';
+        statusColor = Colors.green;
+        break;
+      case 'CANCELLED':
+        statusText = 'Cancelled';
+        statusColor = Colors.red;
+        break;
+      default:
+        statusText = 'Pending';
+        statusColor = Colors.orange;
+        break;
+    }
+
+    return Card(
+      margin: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      elevation: 5,
+      color: Colors.white,
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Doctor Name & Appointment ID in the same row
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(appointment.doctorName ?? 'No Doctor Assigned',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                Row(
+                  children: [
+                    Icon(Icons.confirmation_number,
+                        color: Colors.blue[700], size: 20),
+                    SizedBox(width: 8),
+                    Text(appointment.id.substring(0, 8),
+                        style: TextStyle(fontSize: 16)),
+                  ],
+                ),
+              ],
+            ),
+            SizedBox(height: 10),
+
+            Row(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Container(
+                    width: 80,
+                    height: 80,
+                    color: Colors.grey[300],
+                    child: Icon(Icons.medical_services, size: 40, color: Colors.blue[700]),
+                  ),
+                ),
+                SizedBox(width: 15),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildInfoRow(Icons.calendar_today,
+                          'Date: $formattedDate'),
+                      SizedBox(height: 5),
+                      _buildInfoRow(Icons.access_time,
+                          'Time: $formattedTime'),
+                      SizedBox(height: 5),
+                      _buildInfoRow(Icons.location_on,
+                          'Location: ${appointment.clinicLocation}'),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: 10),
+
+            Align(
+              alignment: Alignment.centerRight,
+              child: Container(
+                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                decoration: BoxDecoration(
+                  color: statusColor.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  statusText,
+                  style: TextStyle(
+                      color: statusColor, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ),
+
+            // Only show action buttons for pending appointments
+            if (appointment.status != 'CANCELLED') ...[
+              Divider(thickness: 1.5, color: Colors.grey[400]),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  if (appointment.status != 'CONFIRMED')
+                    ElevatedButton(
+                      onPressed: () => _confirmAppointment(appointment.id),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue,
+                        padding: EdgeInsets.symmetric(vertical: 10, horizontal: 18),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                      ),
+                      child: Text('Confirm', style: TextStyle(color: Colors.white)),
+                    ),
+                  ElevatedButton(
+                    onPressed: () => _cancelAppointment(appointment.id),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red,
+                      padding: EdgeInsets.symmetric(vertical: 10, horizontal: 18),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                    ),
+                    child: Text('Cancel', style: TextStyle(color: Colors.white)),
+                  ),
+                ],
+              ),
+            ]
           ],
         ),
       ),
