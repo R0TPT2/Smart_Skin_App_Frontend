@@ -157,7 +157,22 @@ class _TicketListScreenState extends State<TicketListScreen> {
                     padding: const EdgeInsets.all(12),
                     itemBuilder: (context, index) {
                       final ticket = _tickets[index];
-                      final imagePath = ticket['medical_image_details']['image_path'] ?? '';
+                      
+                      // Improved image URL extraction
+                      String? imageUrl;
+                      if (ticket['medical_image_details'] != null) {
+                        // Try to get the image_url first (which is the full URL)
+                        imageUrl = ticket['medical_image_details']['image_url'];
+                        
+                        // If image_url is not available, try image_path
+                        if (imageUrl == null || imageUrl.isEmpty) {
+                          final imagePath = ticket['medical_image_details']['image_path'];
+                          if (imagePath != null && imagePath.isNotEmpty) {
+                            imageUrl = imagePath;
+                          }
+                        }
+                      }
+                      
                       final status = ticket['status'] ?? 'pending';
                       final createdAt = DateTime.parse(ticket['created_at']);
                       final formattedDate = DateFormat('MMM d, yyyy • h:mm a').format(createdAt);
@@ -205,21 +220,14 @@ class _TicketListScreenState extends State<TicketListScreen> {
                               ),
                             ),
                             
-                            // Image Preview
+                            // Image Preview - Improved image loading
                             Container(
                               height: 200,
                               width: double.infinity,
                               decoration: BoxDecoration(
                                 color: Colors.grey[200],
                               ),
-                              child: imagePath.startsWith('http')
-                                ? Image.network(
-                                    imagePath,
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (context, error, stackTrace) => 
-                                        const Center(child: Text('Failed to load image')),
-                                  )
-                                : const Center(child: Text('Image not available')),
+                              child: _buildNetworkImage(imageUrl),
                             ),
                             
                             // Ticket Info
@@ -271,26 +279,7 @@ class _TicketListScreenState extends State<TicketListScreen> {
                                     ),
                                   ),
                                   
-                                  const SizedBox(height: 8),
-                                  
-                                  // View Details Button
-                                  SizedBox(
-                                    width: double.infinity,
-                                    child: OutlinedButton(
-                                      onPressed: () {
-                                        // Navigate to ticket details screen
-                                        // You'll need to implement this screen
-                                      },
-                                      style: OutlinedButton.styleFrom(
-                                        foregroundColor: Colors.blue[700],
-                                        side: BorderSide(color: Colors.blue[700]!),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(8),
-                                        ),
-                                      ),
-                                      child: Text('View Details'),
-                                    ),
-                                  ),
+                                  // "View Details" button removed as requested
                                 ],
                               ),
                             ),
@@ -301,6 +290,66 @@ class _TicketListScreenState extends State<TicketListScreen> {
                   ),
                 ),
       ),
+    );
+  }
+  
+  Widget _buildNetworkImage(String? imageUrl) {
+    if (imageUrl == null || imageUrl.isEmpty) {
+      return const Center(
+        child: Text(
+          'No image available',
+          style: TextStyle(color: Colors.grey),
+        ),
+      );
+    }
+    
+    // Ensure the URL has a proper scheme
+    String fullImageUrl = imageUrl;
+    if (!imageUrl.startsWith('http')) {
+      // If it's a relative path, create a complete URL
+      final baseUrl = _apiService.baseUrl;
+      fullImageUrl = baseUrl.endsWith('/') 
+          ? '$baseUrl${imageUrl.startsWith('/') ? imageUrl.substring(1) : imageUrl}'
+          : '$baseUrl${imageUrl.startsWith('/') ? imageUrl : '/$imageUrl'}';
+    }
+    
+    return Image.network(
+      fullImageUrl,
+      fit: BoxFit.cover,
+      loadingBuilder: (context, child, loadingProgress) {
+        if (loadingProgress == null) return child;
+        return Center(
+          child: CircularProgressIndicator(
+            value: loadingProgress.expectedTotalBytes != null
+                ? loadingProgress.cumulativeBytesLoaded / 
+                  loadingProgress.expectedTotalBytes!
+                : null,
+          ),
+        );
+      },
+      errorBuilder: (context, error, stackTrace) {
+        debugPrint('Error loading image: $error for URL: $fullImageUrl');
+        return Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline, color: Colors.red, size: 40),
+              const SizedBox(height: 8),
+              Text(
+                'Unable to load image',
+                style: TextStyle(color: Colors.red[700]),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '${error.toString().substring(0, error.toString().length > 50 ? 50 : error.toString().length)}...',
+                style: TextStyle(color: Colors.red[300], fontSize: 10),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

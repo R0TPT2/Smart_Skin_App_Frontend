@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'patient_details_screen.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'messaging_screen.dart';
-import 'dummy_data.dart'; // Import the dummy data
+import 'dummy_data.dart';
 
 class DoctorHomePage extends StatelessWidget {
   const DoctorHomePage({super.key});

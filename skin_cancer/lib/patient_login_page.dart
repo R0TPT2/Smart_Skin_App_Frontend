@@ -1,13 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
+import 'auth_service.dart';
 import 'patient_signup_page.dart';
 import 'reset_password.dart';
 import 'patient_page/patient_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:flutter/foundation.dart';  // For debugPrint
 
 class PatientLoginPage extends StatefulWidget {
   const PatientLoginPage({super.key});
@@ -19,78 +16,86 @@ class PatientLoginPage extends StatefulWidget {
 class _PatientLoginPageState extends State<PatientLoginPage> {
   final passwordController = TextEditingController();
   final nationalIdController = TextEditingController();
+  final _authService = AuthService();
 
   bool isPasswordVisible = false;
   bool isLoading = false;
 
+  @override
+  void dispose() {
+    passwordController.dispose();
+    nationalIdController.dispose();
+    super.dispose();
+  }
+
   Future<void> login() async {
-    setState(() => isLoading = true);
+    setState(() {
+      isLoading = true;
+    });
+    
     try {
-      final baseUrl = dotenv.env['API_URL'] ?? '';
-      final url = Uri.parse('$baseUrl/authentication/patient/login/');
-      
-      debugPrint('Attempting login to: $url');
-      debugPrint('National ID: ${nationalIdController.text}');
-      // DO NOT log password in production
-      
-      final response = await http.post(
-        url,
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'national_id': nationalIdController.text,
-          'password': passwordController.text,
-        }),
-      );
-
-      debugPrint('Login response status: ${response.statusCode}');
-      
-      if (response.statusCode == 200) {
-        final Map<String, dynamic> data = jsonDecode(response.body);
-        debugPrint('Login successful! Response data received');
-        
-        final String accessToken = data['access'];
-        final String refreshToken = data['refresh'];
-        final String patientId = nationalIdController.text; // Store the patient ID
-
-        // Store all needed authentication info
-        SharedPreferences prefs = await SharedPreferences.getInstance();
-        await prefs.setString('access_token', accessToken);
-        await prefs.setString('refresh_token', refreshToken);
-        await prefs.setString('patient_id', patientId);
-        
-        debugPrint('Saved auth tokens and patient ID to SharedPreferences');
-
-        // Try to get patient name or default to ID if not available
-        String patientName = data['name'] ?? nationalIdController.text;
-
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => PatientPage(
-              patientName: patientName,
-              patientImage: 'assests/Default.jpg',
-            ),
-          ),
-        );
-      } else {
-        debugPrint('Login failed: ${response.body}');
+      if (nationalIdController.text.isEmpty || passwordController.text.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Invalid credentials')),
+          SnackBar(content: Text('Please enter both National ID and password'))
         );
+        return;
+      }
+      
+      final success = await _authService.login(
+        nationalIdController.text, 
+        passwordController.text
+      );
+      
+      if (success) {
+        // Test the JWT token to make sure it works
+        final authTest = await _authService.testAuthentication();
+        if (!authTest && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Authentication issue. Please try again.'))
+          );
+          return;
+        }
+        
+        // Get patient name or use ID if name is not available
+        final prefs = await SharedPreferences.getInstance();
+        final patientName = prefs.getString('patient_name') ?? nationalIdController.text;
+        
+        // Navigate to patient page on successful login
+        if (mounted) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => PatientPage(
+                patientName: patientName,
+                patientImage: 'assests/Default.jpg',
+              ),
+            ),
+          );
+        }
+      } else {
+        // Show error message for failed login
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Invalid credentials. Please check your National ID and password.'))
+          );
+        }
       }
     } catch (e) {
-      debugPrint('Login error: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error connecting to server: $e')),
-      );
+      // Show error message for exceptions
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error connecting to server: $e'))
+        );
+      }
     } finally {
-      setState(() => isLoading = false);
+      if (mounted) {
+        setState(() => isLoading = false);
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    // Rest of your build method stays the same...
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: AppBar(
@@ -135,6 +140,7 @@ class _PatientLoginPageState extends State<PatientLoginPage> {
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   child: Column(
                     children: [
+                      // National ID Input
                       Container(
                         alignment: Alignment.center,
                         padding: EdgeInsets.fromLTRB(30, 3, 20, 0),
@@ -163,6 +169,8 @@ class _PatientLoginPageState extends State<PatientLoginPage> {
                         ),
                       ),
                       const SizedBox(height: 20),
+                      
+                      // Password Input
                       Container(
                         alignment: Alignment.center,
                         padding: EdgeInsets.fromLTRB(30, 3, 20, 0),
@@ -178,6 +186,12 @@ class _PatientLoginPageState extends State<PatientLoginPage> {
                           cursorColor: Colors.black,
                           controller: passwordController,
                           textInputAction: TextInputAction.done,
+                          onSubmitted: (_) {
+                            if (nationalIdController.text.isNotEmpty && 
+                                passwordController.text.isNotEmpty) {
+                              login();
+                            }
+                          },
                           decoration: InputDecoration(
                             border: InputBorder.none,
                             suffixIcon: IconButton(
@@ -197,7 +211,10 @@ class _PatientLoginPageState extends State<PatientLoginPage> {
                           style: TextStyle(color: Colors.black),
                         ),
                       ),
+                      
                       const SizedBox(height: 10),
+                      
+                      // Forgot Password
                       TextButton(
                         onPressed: () {
                           Navigator.push(
@@ -215,23 +232,27 @@ class _PatientLoginPageState extends State<PatientLoginPage> {
                         ),
                       ),
                       const SizedBox(height: 20),
+                      
+                      // Login Button
                       Container(
                         width: double.infinity,
                         margin: EdgeInsets.only(left: 10, right: 10),
                         child: ElevatedButton(
-                          onPressed: isLoading ? null : () {
-                            if (nationalIdController.text.isEmpty) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('National ID is required')),
-                              );
-                            } else if (passwordController.text.isEmpty) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('Password is required')),
-                              );
-                            } else {
-                              login();
-                            }
-                          },
+                          onPressed: isLoading
+                              ? null
+                              : () {
+                                  if (nationalIdController.text.isEmpty) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text('National ID is required')),
+                                    );
+                                  } else if (passwordController.text.isEmpty) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text('Password is required')),
+                                    );
+                                  } else {
+                                    login();
+                                  }
+                                },
                           style: ElevatedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(vertical: 15),
                             backgroundColor: Color.fromARGB(255, 20, 117, 181),
@@ -251,6 +272,8 @@ class _PatientLoginPageState extends State<PatientLoginPage> {
                         ),
                       ),
                       const SizedBox(height: 10),
+                      
+                      // Sign Up Link
                       TextButton(
                         onPressed: () {
                           Navigator.push(

@@ -240,8 +240,10 @@ Future<void> _submitTicket() async {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Analysis submitted successfully')),
       );
+      
+      // FIX: Only pop once to return to the TakePictureScreen
       Navigator.pop(context);
-      Navigator.pop(context);
+      
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error submitting analysis: $e')),

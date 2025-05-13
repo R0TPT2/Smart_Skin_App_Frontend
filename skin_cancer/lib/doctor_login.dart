@@ -1,10 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
 import 'doctor_page/doctor_main.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'doctor_auth_service.dart'; // Update with the correct import path
 
 class DoctorLoginPage extends StatefulWidget {
   const DoctorLoginPage({super.key});
@@ -16,6 +13,7 @@ class DoctorLoginPage extends StatefulWidget {
 class _DoctorLoginPageState extends State<DoctorLoginPage> {
   final passwordController = TextEditingController();
   final doctorIdController = TextEditingController();
+  final _doctorAuthService = DoctorAuthService();
 
   bool isPasswordVisible = false;
   bool isLoading = false;
@@ -26,37 +24,24 @@ class _DoctorLoginPageState extends State<DoctorLoginPage> {
     });
 
     try {
-      final apiUrl = dotenv.env['API_URL'] ?? '';
-      final url = Uri.parse('$apiUrl/authentication/doctor/login/');
-      final response = await http.post(
-        url,
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'doctor_id': doctorIdController.text,
-          'password': passwordController.text,
-        }),
+      // Using the new DoctorAuthService for login
+      final result = await _doctorAuthService.login(
+        doctorIdController.text,
+        passwordController.text,
       );
 
-      if (response.statusCode == 200) {
-        final Map<String, dynamic> data = jsonDecode(response.body);
-        final String accessToken = data['access'];
-        final String refreshToken = data['refresh'];
-        final String doctorName = data['name'];
-
-        SharedPreferences prefs = await SharedPreferences.getInstance();
-        await prefs.setString('access_token', accessToken);
-        await prefs.setString('refresh_token', refreshToken);
-        await prefs.setString('doctor_name', doctorName);
-
-        Navigator.push(
+      if (result['success']) {
+        // Navigate to doctor's main page
+        Navigator.pushReplacement(
           context,
           MaterialPageRoute(
             builder: (context) => DoctorPage(),
           ),
         );
       } else {
+        // Show error message
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Invalid credentials')),
+          SnackBar(content: Text(result['message'])),
         );
       }
     } catch (e) {
@@ -160,6 +145,12 @@ class _DoctorLoginPageState extends State<DoctorLoginPage> {
                         cursorColor: Colors.black,
                         controller: passwordController,
                         textInputAction: TextInputAction.done,
+                        onSubmitted: (_) {
+                          if (doctorIdController.text.isNotEmpty && 
+                              passwordController.text.isNotEmpty) {
+                            login();
+                          }
+                        },
                         decoration: InputDecoration(
                           border: InputBorder.none,
                           suffixIcon: IconButton(
