@@ -1,0 +1,28 @@
+Prerequisites :
+
+Before proceeding, ensure the following are installed and configured:
+
+Flutter SDK : Download and install Flutter from https://flutter.dev .
+Android Studio : Install Android Studio with the Flutter and Dart plugins.
+USB Debugging Enabled : Ensure USB debugging is enabled on your Android device.
+USB Cable : Use a reliable USB cable to connect your phone to the computer.
+Dependencies Installed : Run flutter pub get in the project directory to install required dependencies.
+
+Connect Your Device via USB :
+
+Use a USB cable to connect your Android device to your computer.
+On your phone, allow the "Allow USB Debugging" prompt when it appears.
+
+Run the following command to check if your device is detected : 
+
+{ flutter devices }
+
+In the root of the Flutter project, create a file named .env, make sure it matches the example.
+
+Start the Django server, make sure the API_URL matches the IP address that DJango is running on.
+
+Navigate to the Project Directory, and then Execute the following command to build and run the app on your connected device :
+
+{ flutter run }
+
+The app will compile and launch on your phone automatically.
